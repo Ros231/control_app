@@ -9,8 +9,14 @@ class ButtonControl extends StatefulWidget {
 }
 
 class _ButtonControlState extends State<ButtonControl> {
+  // Base server URL
+  static const String baseUrl = 'http://100.101.22.78:8000';
+
   String gear = 'gear1';
   int _currentGear = 1;
+
+  // Water pump status: 'off', 'low', 'half', 'medium', 'on'
+  String _pumpStatus = 'off';
 
   // Mode: true = Hold to move (Default), false = Tap to move
   bool _isHoldMode = true;
@@ -18,24 +24,8 @@ class _ButtonControlState extends State<ButtonControl> {
   // Track the currently active moving command for visual feedback
   String? _activeCommand;
 
-  Future<void> sendCommandPump(String commandPump) async {
-    final url = Uri.parse('http://100.101.22.78:8000/control/$commandPump');
-
-    try {
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        debugPrint('Command sent: $commandPump');
-      } else {
-        debugPrint('Failed to send command: ${response.statusCode}');
-      }
-    } catch (e) {
-      debugPrint('Error sending command: $e');
-    }
-  }
-
-
   Future<void> sendCommand(String gear, String command) async {
-    final url = Uri.parse('http://100.101.22.78:8000/control/$gear/$command');
+    final url = Uri.parse('$baseUrl/control/$gear/$command');
 
     try {
       final response = await http.get(url);
@@ -47,6 +37,28 @@ class _ButtonControlState extends State<ButtonControl> {
     } catch (e) {
       debugPrint('Error sending command: $e');
     }
+  }
+
+  Future<void> sendCommandPump(String commandPump) async {
+    final url = Uri.parse('$baseUrl/pump/$commandPump');
+
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        debugPrint('Pump command sent: $commandPump');
+      } else {
+        debugPrint('Failed to send pump command: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Error sending pump command: $e');
+    }
+  }
+
+  void _setPump(String command) {
+    setState(() {
+      _pumpStatus = command;
+    });
+    sendCommandPump(command);
   }
 
   void _setGear(int newGear) {
@@ -96,7 +108,7 @@ class _ButtonControlState extends State<ButtonControl> {
 
   Widget _buildGearCard() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -280,6 +292,204 @@ class _ButtonControlState extends State<ButtonControl> {
             }),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPumpCard() {
+    final isPumpOn = _pumpStatus != 'off';
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: isPumpOn
+                ? Colors.cyan.withValues(alpha: 0.15)
+                : Colors.black.withValues(alpha: 0.05),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Header: Icon, Title, and Main Switch
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: isPumpOn
+                          ? Colors.cyan.withValues(alpha: 0.15)
+                          : Colors.grey.shade100,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.water_drop_rounded,
+                      color: isPumpOn ? Colors.cyan.shade700 : Colors.grey.shade400,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Water Pump',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        isPumpOn
+                            ? 'กำลังทำงาน (${_pumpStatus.toUpperCase()})'
+                            : 'ปิดการทำงาน (OFF)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isPumpOn ? Colors.cyan.shade700 : Colors.grey.shade500,
+                          fontWeight: isPumpOn ? FontWeight.w600 : FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              // Quick Toggle Switch
+              Row(
+                children: [
+                  Text(
+                    isPumpOn ? 'ON' : 'OFF',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: isPumpOn ? Colors.cyan.shade700 : Colors.grey.shade400,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Switch.adaptive(
+                    value: isPumpOn,
+                    activeThumbColor: Colors.cyan.shade600,
+                    onChanged: (val) {
+                      _setPump(val ? 'on' : 'off');
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Pump Speed Levels: Off | Low (20%) | Half (50%) | Medium (70%) | Max (100%)
+          Row(
+            children: [
+              _buildPumpLevelButton(
+                label: 'OFF',
+                subLabel: 'ปิด (0%)',
+                command: 'off',
+                activeColor: Colors.grey.shade700,
+              ),
+              const SizedBox(width: 6),
+              _buildPumpLevelButton(
+                label: 'LOW',
+                subLabel: 'เบา (20%)',
+                command: 'low',
+                activeColor: const Color(0xFF00B4D8),
+              ),
+              const SizedBox(width: 6),
+              _buildPumpLevelButton(
+                label: 'HALF',
+                subLabel: 'ครึ่ง (50%)',
+                command: 'half',
+                activeColor: const Color(0xFF0077B6),
+              ),
+              const SizedBox(width: 6),
+              _buildPumpLevelButton(
+                label: 'MED',
+                subLabel: 'กลาง (70%)',
+                command: 'medium',
+                activeColor: const Color(0xFF4361EE),
+              ),
+              const SizedBox(width: 6),
+              _buildPumpLevelButton(
+                label: 'MAX',
+                subLabel: 'เต็มที่ (100%)',
+                command: 'on',
+                activeColor: const Color(0xFF06D6A0),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPumpLevelButton({
+    required String label,
+    required String subLabel,
+    required String command,
+    required Color activeColor,
+  }) {
+    final isSelected = _pumpStatus == command;
+
+    return Expanded(
+      child: InkWell(
+        onTap: () => _setPump(command),
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? activeColor : Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? activeColor : Colors.grey.shade300,
+              width: 1.5,
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: activeColor.withValues(alpha: 0.35),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: isSelected ? Colors.white : Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subLabel,
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  color: isSelected
+                      ? Colors.white.withValues(alpha: 0.85)
+                      : Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -552,9 +762,11 @@ class _ButtonControlState extends State<ButtonControl> {
           child: Column(
             children: [
               _buildGearCard(),
+              _buildPumpCard(),
               _buildModeSwitch(),
               const SizedBox(height: 16),
               _buildControllerPad(),
+              const SizedBox(height: 20),
             ],
           ),
         ),
